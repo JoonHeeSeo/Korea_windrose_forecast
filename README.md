@@ -1,4 +1,4 @@
-# Korea_windmap_forecast
+# Korea_windrose_forecast
 
 ## 📖 Overview
 

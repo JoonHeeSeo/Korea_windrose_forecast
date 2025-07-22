@@ -1,17 +1,17 @@
 #!/usr/bin/env python3
-"""build_wind_atlas.py
+"""build_wind_rose.py
 ──────────────────────
 주어진 통합 CSV(`KR_wind_all_stations.csv`)로부터 관측소별 풍황(風況)
 통계치와 풍향 장미(rose) 그래프, Weibull 분포 파라미터 등을 계산해
-간이 Wind Atlas를 만들어 저장합니다.
+간이 **Wind Rose** 패키지를 만들어 저장합니다.
 
 Usage
 -----
 1) 기본 실행 예
-   python build_wind_atlas.py \
+   python build_wind_rose.py \
        --input data/KR_wind_all_stations.csv \
        --meta  data/KR_wind_metadata.csv \
-       --out   atlas
+       --out   rose
 
 2) 옵션
    --freq monthly|annual : 집계 주기 (기본 annual)
@@ -38,13 +38,13 @@ def fit_weibull(speeds: np.ndarray):
     return c, k
 
 
-def mean_power_density(speeds: np.ndarray, rho=1.225):
+def mean_power_density(speeds: np.ndarray, rho: float = 1.225):
     """0.5 * rho * v^3 의 평균 (W/m²)"""
     speeds = speeds[~np.isnan(speeds)]
     return 0.5 * rho * np.mean(speeds ** 3)
 
 
-def direction_bins(deg, bins=16):
+def direction_bins(deg, bins: int = 16):
     """풍향을 16방위 등으로 빈도 집계 (결과: dict[label] = frequency)"""
     labels = np.arange(0, 360, 360 / bins)  # 0,22.5,...
     idx = np.floor((deg % 360) / (360 / bins)).astype(int)
@@ -56,7 +56,17 @@ def direction_bins(deg, bins=16):
 # 메인 프로시저
 # ──────────────────────────────────────────────────────────────
 
-def build_atlas(df, meta_df=None, freq="annual", plot_rose=False, out_dir="atlas", rho=1.225):
+def build_rose(
+    df: pd.DataFrame,
+    meta_df: pd.DataFrame | None = None,
+    *,
+    freq: str = "annual",
+    plot_rose: bool = False,
+    out_dir: str | Path = "rose",
+    rho: float = 1.225,
+):
+    """관측소별 풍향장미 및 풍황 통계 테이블 생성"""
+
     out_dir = Path(out_dir)
     out_dir.mkdir(exist_ok=True, parents=True)
 
@@ -66,7 +76,7 @@ def build_atlas(df, meta_df=None, freq="annual", plot_rose=False, out_dir="atlas
     else:
         df["period"] = df["datetime"].dt.to_period("Y")
 
-    summaries = []
+    summaries: list[dict] = []
 
     for (station, period), g in df.groupby(["station", "period"]):
         wspd = g["wspd"].values.astype(float)
@@ -89,7 +99,7 @@ def build_atlas(df, meta_df=None, freq="annual", plot_rose=False, out_dir="atlas
             "weibull_k": shape,
             "weibull_c": scale,
             "power_density": mpd,
-            **{f"dir_{k}": v for k, v in rose.items()}
+            **{f"dir_{k}": v for k, v in rose.items()},
         }
         summaries.append(rec)
 
@@ -97,9 +107,10 @@ def build_atlas(df, meta_df=None, freq="annual", plot_rose=False, out_dir="atlas
         if plot_rose:
             try:
                 from windrose import WindroseAxes  # pip install windrose
-                fig = plt.figure(figsize=(6,6))
+
+                fig = plt.figure(figsize=(6, 6))
                 ax = WindroseAxes.from_ax(fig=fig)
-                ax.bar(wdir, wspd, normed=True, opening=0.9, edgecolor='white')
+                ax.bar(wdir, wspd, normed=True, opening=0.9, edgecolor="white")
                 ax.set_legend()
                 fig.suptitle(f"Station {station} {period}")
                 fig.savefig(out_dir / f"rose_{station}_{period}.png", dpi=150)
@@ -107,23 +118,23 @@ def build_atlas(df, meta_df=None, freq="annual", plot_rose=False, out_dir="atlas
             except ImportError:
                 print("✖ windrose 패키지 없음: rose plot 스킵")
 
-    atlas_df = pd.DataFrame(summaries)
+    rose_df = pd.DataFrame(summaries)
 
     # 메타데이터 병합
     if meta_df is not None:
-        atlas_df = atlas_df.merge(meta_df, on="station", how="left")
+        rose_df = rose_df.merge(meta_df, on="station", how="left")
 
-    atlas_path = out_dir / f"wind_atlas_{freq}.csv"
-    atlas_df.to_csv(atlas_path, index=False)
-    print(f"✅ Wind atlas saved → {atlas_path}")
+    rose_path = out_dir / f"wind_rose_{freq}.csv"
+    rose_df.to_csv(rose_path, index=False)
+    print(f"✅ Wind rose saved → {rose_path}")
 
 
 # ──────────────────────────────────────────────────────────────
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
     ap.add_argument("--input", required=True, help="통합 CSV 파일 경로")
-    ap.add_argument("--meta",  help="관측소 메타데이터 CSV(선택)")
-    ap.add_argument("--out", default="atlas", help="출력 폴더")
+    ap.add_argument("--meta", help="관측소 메타데이터 CSV(선택)")
+    ap.add_argument("--out", default="rose", help="출력 폴더")
     ap.add_argument("--freq", choices=["monthly", "annual"], default="annual")
     ap.add_argument("--plot_rose", action="store_true", help="풍향장미 PNG 저장")
     ap.add_argument("--rho", type=float, default=1.225, help="공기밀도 kg/m³")
@@ -133,4 +144,11 @@ if __name__ == "__main__":
     df = pd.read_csv(args.input, parse_dates=["datetime"])
     meta_df = pd.read_csv(args.meta) if args.meta else None
 
-    build_atlas(df, meta_df, freq=args.freq, plot_rose=args.plot_rose, out_dir=args.out, rho=args.rho)
+    build_rose(
+        df,
+        meta_df,
+        freq=args.freq,
+        plot_rose=args.plot_rose,
+        out_dir=args.out,
+        rho=args.rho,
+    )

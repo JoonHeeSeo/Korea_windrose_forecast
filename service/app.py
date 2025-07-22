@@ -8,7 +8,7 @@ from pathlib import Path
 # Page config
 # -----------------------------------------------------------------------------
 st.set_page_config(
-    page_title="Wind Atlas Explorer",
+    page_title="Wind Rose Explorer",
     page_icon="🌬️",
     layout="wide",
 )
@@ -18,12 +18,12 @@ st.set_page_config(
 # -----------------------------------------------------------------------------
 @st.cache_data(show_spinner=False)
 def load_data() -> pd.DataFrame:
-    """Load the annual wind‑atlas statistics shipped with the app.
+    """Load the annual wind‑rose statistics shipped with the app.
 
     The CSV is expected to live **in the same folder** as this `app.py`, named
-    `wind_atlas_annual.csv`.
+    `wind_rose_annual.csv`.
     """
-    csv_path = Path(__file__).parent / "wind_atlas_annual.csv"
+    csv_path = Path(__file__).parent / "wind_rose_annual.csv"
     if not csv_path.exists():
         st.error(f"CSV not found: {csv_path}")
         st.stop()
@@ -44,7 +44,7 @@ row = df.loc[df["station"] == sel_station].iloc[0]
 # -----------------------------------------------------------------------------
 # Title & headline metrics
 # -----------------------------------------------------------------------------
-st.title(f"Wind Atlas · Station {sel_station} · {int(row['period'])}")
+st.title(f"Wind Rose · Station {sel_station} · {row['period']}")
 
 m1, m2, m3, m4, m5 = st.columns(5)
 with m1:
