@@ -1,101 +1,89 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
-import pydeck as pdk
 import matplotlib.pyplot as plt
 from pathlib import Path
 
-#━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-# CONFIG
-#━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-DATA_PATH = Path("atlas_results/wind_atlas_annual_geo.csv")  # 좌표 포함 CSV
-MAP_INITIAL = {"lat": 36.0, "lon": 127.5, "zoom": 6}
-
-#━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-st.set_page_config(page_title="Korea Wind Atlas", layout="wide")
-st.title("🇰🇷 Korea Wind Atlas – Streamlit Viewer")
-
-#━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-# LOAD DATA
-#━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-@st.cache_data
-def load_data(csv_path: Path):
-    df = pd.read_csv(csv_path)
-    # 좌표 없는 행 제거
-    return df.dropna(subset=["latitude", "longitude"])
-
-df = load_data(DATA_PATH)
-
-#━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-# SIDEBAR CONTROLS
-#━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-with st.sidebar:
-    st.header("🔧 Filters")
-    metric = st.selectbox("Metric to color-map", ["mean", "p90", "power_density"], index=0)
-    min_cov = st.slider("Minimum coverage (0~1)", 0.0, 1.0, 0.8, 0.05)
-    stations = st.multiselect("Select stations (blank = all)", df["station"].sort_values().unique())
-    show_rose = st.checkbox("Show wind rose for selected station", value=True)
-
-# 필터 적용
-mask = df["n"] / (24*365) >= min_cov  # assuming hourly data
-if stations:
-    mask &= df["station"].isin(stations)
-filtered = df[mask].copy()
-
-#━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-# MAP – pydeck ScatterplotLayer
-#━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-layer = pdk.Layer(
-    "ScatterplotLayer",
-    data=filtered,
-    get_position="[longitude, latitude]",
-    get_radius=7000,
-    get_fill_color="[scale, 140, 200-scale]",
-    pickable=True,
+# -----------------------------------------------------------------------------
+# Page config
+# -----------------------------------------------------------------------------
+st.set_page_config(
+    page_title="Wind Atlas Explorer",
+    page_icon="🌬️",
+    layout="wide",
 )
-# 색상 스케일 계산
-min_v, max_v = filtered[metric].min(), filtered[metric].max()
-scale = ((filtered[metric] - min_v)/(max_v - min_v + 1e-6)*255).astype(int)
-layer.data = layer.data.assign(scale=scale)
 
-view_state = pdk.ViewState(latitude=MAP_INITIAL["lat"], longitude=MAP_INITIAL["lon"], zoom=MAP_INITIAL["zoom"])
+# -----------------------------------------------------------------------------
+# Data Loading
+# -----------------------------------------------------------------------------
+@st.cache_data(show_spinner=False)
+def load_data() -> pd.DataFrame:
+    """Load the annual wind‑atlas statistics shipped with the app.
 
-st.pydeck_chart(pdk.Deck(layers=[layer], initial_view_state=view_state, tooltip={"text": "{station}\n"+metric+": {"+metric+"}"}))
+    The CSV is expected to live **in the same folder** as this `app.py`, named
+    `wind_atlas_annual.csv`.
+    """
+    csv_path = Path(__file__).parent / "wind_atlas_annual.csv"
+    if not csv_path.exists():
+        st.error(f"CSV not found: {csv_path}")
+        st.stop()
+    return pd.read_csv(csv_path)
 
-st.caption(f"Colored by `{metric}`; {len(filtered)} stations shown.")
 
-#━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-# DATA TABLE
-#━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-with st.expander("📊 Data table"):
-    st.dataframe(filtered.round(2), use_container_width=True)
+df = load_data()
 
-#━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-# WIND ROSE PLOT (single station)
-#━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-if show_rose and len(stations)==1:
-    st.header(f"🌸 Wind Rose – Station {stations[0]}")
-    # 원본 시계열 CSV 경로 추정: atlas_results/rose_<station>_2023.png 이미 만들었다면 불러오기
-    rose_png = Path("atlas_results")/f"rose_{stations[0]}_2023.png"
-    if rose_png.exists():
-        st.image(str(rose_png))
-    else:
-        st.info("No pre-generated rose plot found. Generating on the fly…")
-        try:
-            from windrose import WindroseAxes
-            csv_master = Path("data/KR_wind_all_stations.csv")
-            if not csv_master.exists():
-                st.error("Master CSV not found. Provide KR_wind_all_stations.csv in data/ directory.")
-            else:
-                raw = pd.read_csv(csv_master, parse_dates=["datetime"])
-                g = raw[raw.station==int(stations[0])]
-                if g.empty:
-                    st.warning("No data for this station in master CSV.")
-                else:
-                    fig = plt.figure(figsize=(6,6))
-                    ax = WindroseAxes.from_ax(fig=fig)
-                    ax.bar(g.wdir, g.wspd, normed=True, opening=0.9, edgecolor='white')
-                    ax.set_legend()
-                    st.pyplot(fig)
-        except ImportError:
-            st.error("windrose package not installed. Run `pip install windrose`.")
+# -----------------------------------------------------------------------------
+# Sidebar – station selector
+# -----------------------------------------------------------------------------
+st.sidebar.header("⚙️ Controls")
+stations = sorted(df["station"].unique())
+sel_station = st.sidebar.selectbox("Station ID", stations, format_func=str)
+
+row = df.loc[df["station"] == sel_station].iloc[0]
+
+# -----------------------------------------------------------------------------
+# Title & headline metrics
+# -----------------------------------------------------------------------------
+st.title(f"Wind Atlas · Station {sel_station} · {int(row['period'])}")
+
+m1, m2, m3, m4, m5 = st.columns(5)
+with m1:
+    st.metric("Mean wind speed (m/s)", f"{row['mean']:.2f}")
+with m2:
+    st.metric("p90 wind speed (m/s)", f"{row['p90']:.1f}")
+with m3:
+    st.metric("Weibull k", f"{row['weibull_k']:.2f}")
+with m4:
+    st.metric("Weibull c (m/s)", f"{row['weibull_c']:.2f}")
+with m5:
+    st.metric("Power density (W/m²)", f"{row['power_density']:.0f}")
+
+# -----------------------------------------------------------------------------
+# Wind‑rose chart
+# -----------------------------------------------------------------------------
+
+direction_bins = [0, 22, 45, 67, 90, 112, 135, 157, 180, 202, 225, 247, 270, 292, 315, 337]
+labels = [f"{d}°" for d in direction_bins]
+freq_cols = [f"dir_{d}" for d in direction_bins]
+freqs = row[freq_cols].values
+
+# Ensure the polar chart closes the circle by appending the first element
+freqs = np.append(freqs, freqs[0])
+angles = np.deg2rad(direction_bins + [360])
+
+fig = plt.figure(figsize=(6, 6))
+ax = fig.add_subplot(111, polar=True)
+ax.plot(angles, freqs, linewidth=1.5)
+ax.fill(angles, freqs, alpha=0.3)
+ax.set_theta_zero_location("N")
+ax.set_theta_direction(-1)
+ax.set_thetagrids(direction_bins, labels)
+ax.set_title("Wind‑direction frequency distribution", pad=20)
+
+st.pyplot(fig, use_container_width=True)
+
+# -----------------------------------------------------------------------------
+# Raw data toggle
+# -----------------------------------------------------------------------------
+if st.checkbox("Show raw annual record"):
+    st.dataframe(row.to_frame().T)
