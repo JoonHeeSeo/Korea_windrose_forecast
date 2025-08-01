@@ -30,7 +30,7 @@ def load_data(year: int) -> pd.DataFrame:
 # -----------------------------------------------------------------------------
 # Configure available years (edit this list when new files arrive)
 # -----------------------------------------------------------------------------
-DEFAULT_YEARS = [2022, 2023, 2024]
+DEFAULT_YEARS = list(range(2013, 2025))
 if not DEFAULT_YEARS:
     st.error("No CSV files specified in DEFAULT_YEARS list.")
     st.stop()
