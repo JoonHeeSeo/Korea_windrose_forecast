@@ -1,65 +1,51 @@
-# Korea_windrose_forecast
+# Korea Wind Rose
 
 [![Streamlit Demo](https://img.shields.io/badge/Demo-Streamlit-blue)](https://korea-windrose-forecast.streamlit.app/)
 
-https://korea-windrose-forecast.streamlit.app/
+Wind rose visualization tool for Korean weather stations using historical data from Meteostat.
 
-## 📖 Overview
+**Live demo:** https://korea-windrose-forecast.streamlit.app/
 
-Interactive wind rose explorer for Korean stations, built from historical wind data.  
-You can compare **annual wind roses** and basic **wind resource statistics** (Weibull, power density, etc.) between years.
+## Features
 
-### Key Features
-
-- Meteostat-based wind data for **Korean stations (`KR`)**
-- Hourly or daily time resolution
+- Wind data from Korean weather stations via Meteostat API
+- Hourly or daily resolution
 - Annual or monthly aggregation
-- Weibull fitting & mean power density
+- Weibull distribution fitting and mean power density calculation
 - 16-direction wind rose frequencies
-- Streamlit UI for **year-to-year comparison** at a selected station
+- Year-to-year comparison at selected stations
 
-## 🌐 Live Demo
-
-```text
-https://korea-windrose-forecast.streamlit.app/
-```
-
-> or run locally with `streamlit run service/app.py` (see below).
-
----
-
-## 🛠️ Installation
+## Installation
 
 ```bash
-# Python 3.13+ is recommended
+# Python 3.13+ recommended
 python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
+source venv/bin/activate  # Windows: venv\Scripts\activate
 pip install -r requirements.txt
 ```
 
-## ⬇️ Data
+## Data Pipeline
 
-Weather observations are pulled on‑demand from **[Meteostat](https://dev.meteostat.net/)** and cached locally.
+Weather data is fetched from [Meteostat](https://dev.meteostat.net/) and cached locally.
 
 ```bash
+# Download wind data
 python data/download_weather.py --start 2013-01-01 --end 2013-12-31 --interval hourly --limit 50 --out_dir korea_wind --merge
+
+# Generate wind rose statistics
 python data/wind_rose.py --input korea_wind/KR_wind_all_stations.csv --out service --freq annual
 ```
 
-## 🚀 Training
-
-## 🖥️ Streamlit App
-
-The dashboard lets you
-
-- Pick a date range and compare model forecasts with actual observations
-- Visualise uncertainty bands & residuals
-- Download predictions as CSV
-
-Run locally:
+## Running the App
 
 ```bash
 streamlit run service/app.py
 ```
 
-Deploy effortlessly to **Streamlit Community Cloud** (or any Docker‑ready host).
+The app allows you to:
+- Select a station and view wind rose diagrams
+- Compare wind patterns across different years
+- Check wind resource statistics (Weibull parameters, power density)
+- Download data as CSV
+
+Works on Streamlit Community Cloud or any Docker host.
