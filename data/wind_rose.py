@@ -25,6 +25,8 @@ import numpy as np
 from scipy.stats import weibull_min
 import matplotlib.pyplot as plt
 
+from crosswind import calc_crosswind, calc_headwind, load_airports
+
 # ──────────────────────────────────────────────────────────────
 # 통계 함수
 # ──────────────────────────────────────────────────────────────
@@ -64,11 +66,40 @@ def build_rose(
     plot_rose: bool = False,
     out_dir: str | Path = "rose",
     rho: float = 1.225,
+    airports_df: pd.DataFrame | None = None,
+    station_icao_map: dict | None = None,
 ):
-    """관측소별 풍향장미 및 풍황 통계 테이블 생성"""
+    """관측소별 풍향장미 및 풍황 통계 테이블 생성
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        통합 바람 데이터 (datetime, station, wspd, wdir 컬럼 필수)
+    meta_df : pd.DataFrame, optional
+        관측소 메타데이터
+    freq : str
+        집계 주기 ('monthly' 또는 'annual')
+    plot_rose : bool
+        풍향장미 PNG 저장 여부
+    out_dir : str | Path
+        출력 폴더
+    rho : float
+        공기밀도 (kg/m³)
+    airports_df : pd.DataFrame, optional
+        공항/활주로 정보. 제공 시 교차풍 통계 계산
+    station_icao_map : dict, optional
+        관측소 → ICAO 코드 매핑
+    """
 
     out_dir = Path(out_dir)
     out_dir.mkdir(exist_ok=True, parents=True)
+
+    # 공항별 활주로 heading 매핑 구축 (교차풍 계산용)
+    airport_headings = {}
+    if airports_df is not None:
+        for icao in airports_df["icao"].unique():
+            # 각 공항의 주 활주로 heading (첫 번째 활주로 사용)
+            airport_headings[icao] = airports_df[airports_df["icao"] == icao]["heading"].iloc[0]
 
     # 집계 주기별 그룹 키 설정
     if freq == "monthly":
@@ -101,6 +132,34 @@ def build_rose(
             "power_density": mpd,
             **{f"dir_{k}": v for k, v in rose.items()},
         }
+
+        # 교차풍 통계 추가 (공항 데이터가 있는 경우)
+        if airports_df is not None:
+            # station → ICAO 매핑
+            if station_icao_map:
+                icao = station_icao_map.get(station)
+            else:
+                icao = station  # station 값이 ICAO 코드라고 가정
+
+            if icao and icao in airport_headings:
+                heading = airport_headings[icao]
+                valid = ~np.isnan(wspd) & ~np.isnan(wdir)
+                wspd_valid = wspd[valid]
+                wdir_valid = wdir[valid]
+
+                if len(wspd_valid) > 0:
+                    crosswind = calc_crosswind(wspd_valid, wdir_valid, heading)
+                    headwind = calc_headwind(wspd_valid, wdir_valid, heading)
+
+                    rec["runway_heading"] = heading
+                    rec["crosswind_mean"] = np.mean(crosswind)
+                    rec["crosswind_abs_mean"] = np.mean(np.abs(crosswind))
+                    rec["crosswind_abs_max"] = np.max(np.abs(crosswind))
+                    rec["crosswind_p90"] = np.percentile(np.abs(crosswind), 90)
+                    rec["headwind_mean"] = np.mean(headwind)
+                    rec["tailwind_max"] = -np.min(headwind)
+                    rec["exceed_15kt_pct"] = 100 * np.mean(np.abs(crosswind) > 15)
+
         summaries.append(rec)
 
         # 풍향장미 그래프 (옵션)
@@ -138,11 +197,30 @@ if __name__ == "__main__":
     ap.add_argument("--freq", choices=["monthly", "annual"], default="annual")
     ap.add_argument("--plot_rose", action="store_true", help="풍향장미 PNG 저장")
     ap.add_argument("--rho", type=float, default=1.225, help="공기밀도 kg/m³")
+    ap.add_argument("--airports", help="공항/활주로 CSV (교차풍 통계 계산용)")
+    ap.add_argument("--station_icao", help="관측소→ICAO 매핑 JSON 파일")
     args = ap.parse_args()
 
     # 데이터 로드
     df = pd.read_csv(args.input, parse_dates=["datetime"])
     meta_df = pd.read_csv(args.meta) if args.meta else None
+
+    # 공항 데이터 로드
+    airports_df = None
+    if args.airports:
+        airports_df = pd.read_csv(args.airports)
+    else:
+        # 기본 경로에서 시도
+        default_airports = Path(__file__).parent / "airports.csv"
+        if default_airports.exists():
+            airports_df = load_airports(default_airports)
+
+    # station → ICAO 매핑 로드
+    station_icao_map = None
+    if args.station_icao:
+        import json
+        with open(args.station_icao) as f:
+            station_icao_map = json.load(f)
 
     build_rose(
         df,
@@ -151,4 +229,6 @@ if __name__ == "__main__":
         plot_rose=args.plot_rose,
         out_dir=args.out,
         rho=args.rho,
+        airports_df=airports_df,
+        station_icao_map=station_icao_map,
     )
