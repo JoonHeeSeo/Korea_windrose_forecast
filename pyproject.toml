@@ -1,0 +1,16 @@
+[project]
+name = "korea-windrose-forecast"
+version = "0.1.0"
+description = "Wind rose visualization tool for Korean weather stations using historical data from Meteostat"
+requires-python = ">=3.13"
+dependencies = [
+    "altair>=5.5.0",
+    "matplotlib>=3.10.3",
+    "meteostat>=1.7.1",
+    "numpy>=2.3.1",
+    "pandas>=2.3.0",
+    "pyarrow>=21.0.0",
+    "scipy>=1.16.0",
+    "streamlit>=1.47.0",
+    "windrose>=1.9.2",
+]

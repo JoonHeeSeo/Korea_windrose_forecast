@@ -19,9 +19,7 @@ Wind rose visualization tool for Korean weather stations using historical data f
 
 ```bash
 # Python 3.13+ recommended
-python -m venv venv
-source venv/bin/activate  # Windows: venv\Scripts\activate
-pip install -r requirements.txt
+uv sync
 ```
 
 ## Data Pipeline
@@ -30,16 +28,16 @@ Weather data is fetched from [Meteostat](https://dev.meteostat.net/) and cached 
 
 ```bash
 # Download wind data
-python data/download_weather.py --start 2013-01-01 --end 2013-12-31 --interval hourly --limit 50 --out_dir korea_wind --merge
+uv run python data/download_weather.py --start 2013-01-01 --end 2013-12-31 --interval hourly --limit 50 --out_dir korea_wind --merge
 
 # Generate wind rose statistics
-python data/wind_rose.py --input korea_wind/KR_wind_all_stations.csv --out service --freq annual
+uv run python data/wind_rose.py --input korea_wind/KR_wind_all_stations.csv --out service --freq annual
 ```
 
 ## Running the App
 
 ```bash
-streamlit run service/app.py
+uv run streamlit run service/app.py
 ```
 
 The app allows you to:
